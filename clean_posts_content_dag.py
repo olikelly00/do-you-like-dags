@@ -55,6 +55,9 @@ with DAG(
         source_cursor.execute(
             "SELECT id, title, body, owner_user_id, creation_date FROM posts WHERE body IS NOT NULL;"
         )
+        
+        rows = source_cursor.fetchall()
+        
         target_conn = psycopg2.connect(
             dbname="analyticaldb",
             user="airflow_user_3",
@@ -67,17 +70,36 @@ with DAG(
         target_cursor.execute(
             """CREATE TABLE IF NOT EXISTS cleaned_posts (id INTEGER PRIMARY KEY, title TEXT, body TEXT NOT NULL, owner_user_id INTEGER NOT NULL, creation_date DATE NOT NULL);"""
         )
-        BATCH_SIZE = 10000
+        # BATCH_SIZE = 10000
 
-        while True:
-            rows = source_cursor.fetchmany(BATCH_SIZE)
-            if not rows:
-                break
+        # while True:
+        #     rows = source_cursor.fetchmany(BATCH_SIZE)
+        #     if not rows:
+        #         break
 
+        if rows:  
             target_cursor.executemany(
-                "INSERT INTO cleaned_posts id, title, body, owner_user_id, creation_date VALUES (%s, %s, %s, %s, %s) rows"
-            )
+                    """
+                    INSERT INTO cleaned_posts (id, title, body, owner_user_id, creation_date) 
+                    VALUES (%s, %s, %s, %s, %s) 
+                    ON CONFLICT (id)
+                    DO UPDATE
+                    title = EXCLUDED.title,
+                    body = EXCLUDED.body,
+                    owner_user_id = EXCLUDED.owner_user_id,
+                    creation_date = EXCLUDED.creation_date
+                    """, rows
+                )
 
         target_conn.commit()
         source_conn.close()
         target_conn.close()
+
+
+        transfer_task = PythonOperator(
+        task_id='transfer_data',
+        python_callable=transfer_data,
+        dag=dag,
+    )
+        
+        transfer_task
