@@ -36,66 +36,65 @@ target_db_user = Variable.get("target_db_user")
 target_db_password = Variable.get("target_db_password")
 target_db_host = Variable.get("target_db_host")
 
-
 def transfer_all_batches(**kwargs):
         for batch_number in range(NUM_BATCHES):
             offset = batch_number * BATCH_SIZE
 
-        source_conn = psycopg2.connect(
-            dbname="stackoverflow",
-            user=source_db_user,
-            password=source_db_password,
-            host=source_db_host,
-            port="5432",
-        )
-        source_cursor = source_conn.cursor()
-        source_cursor.execute(
-            f"""
-            SELECT id, title, body, owner_user_id, creation_date 
-            FROM posts 
-            WHERE body IS NOT NULL 
-            AND title IS NOT NULL
-            AND owner_user_id IS NOT NULL
-            AND creation_date IS NOT NULL
-            LIMIT {BATCH_SIZE} OFFSET {offset};
-            """
-        )
-        
-        rows = source_cursor.fetchall()
-        
-        if not rows:
-            return
-        
-        target_conn = psycopg2.connect(
-            dbname="analyticaldb",
-            user=target_db_user,
-            password=target_db_password,
-            host=target_db_host,
-            port="5432",
-        )
-        target_cursor = target_conn.cursor()
+            source_conn = psycopg2.connect(
+                dbname="stackoverflow",
+                user=source_db_user,
+                password=source_db_password,
+                host=source_db_host,
+                port="5432",
+            )
+            source_cursor = source_conn.cursor()
+            source_cursor.execute(
+                f"""
+                SELECT id, title, body, owner_user_id, creation_date 
+                FROM posts 
+                WHERE body IS NOT NULL 
+                AND title IS NOT NULL
+                AND owner_user_id IS NOT NULL
+                AND creation_date IS NOT NULL
+                LIMIT {BATCH_SIZE} OFFSET {offset};
+                """
+            )
+            
+            rows = source_cursor.fetchall()
+            
+            if not rows:
+                return
+            
+            target_conn = psycopg2.connect(
+                dbname="analyticaldb",
+                user=target_db_user,
+                password=target_db_password,
+                host=target_db_host,
+                port="5432",
+            )
+            target_cursor = target_conn.cursor()
 
-        target_cursor.execute(
-            """CREATE TABLE IF NOT EXISTS cleaned_posts (id INTEGER PRIMARY KEY, title TEXT, body TEXT NOT NULL, owner_user_id INTEGER NOT NULL, creation_date DATE NOT NULL);"""
-        )
-
-        if rows:  
-            target_cursor.executemany(
-                    """
-                    INSERT INTO cleaned_posts (id, title, body, owner_user_id, creation_date) 
-                    VALUES (%s, %s, %s, %s, %s) 
-                    ON CONFLICT (id)
-                    DO UPDATE SET
-                        title = EXCLUDED.title,
-                        body = EXCLUDED.body,
-                        owner_user_id = EXCLUDED.owner_user_id,
-                        creation_date = EXCLUDED.creation_date;
-                    """, rows
+            target_cursor.execute(
+                """CREATE TABLE IF NOT EXISTS cleaned_posts (id INTEGER PRIMARY KEY, title TEXT, body TEXT NOT NULL, owner_user_id INTEGER NOT NULL, creation_date DATE NOT NULL);"""
             )
 
-        target_conn.commit()
-        source_conn.close()
-        target_conn.close()
+            if rows:  
+                target_cursor.executemany(
+                        """
+                        INSERT INTO cleaned_posts (id, title, body, owner_user_id, creation_date) 
+                        VALUES (%s, %s, %s, %s, %s) 
+                        ON CONFLICT (id)
+                        DO UPDATE SET
+                            title = EXCLUDED.title,
+                            body = EXCLUDED.body,
+                            owner_user_id = EXCLUDED.owner_user_id,
+                            creation_date = EXCLUDED.creation_date;
+                        """, rows
+                )
+
+            target_conn.commit()
+            source_conn.close()
+            target_conn.close()
 
 
 with DAG(
