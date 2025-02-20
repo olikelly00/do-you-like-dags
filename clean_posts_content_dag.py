@@ -96,10 +96,10 @@ with DAG(
         target_conn.close()
 
 
-        transfer_task = PythonOperator(
-        task_id='transfer_data',
-        python_callable=transfer_data,
-        dag=dag,
+    transfer_task = PythonOperator(
+    task_id='transfer_data',
+    python_callable=transfer_data,
+    dag=dag,
     )
         
-        transfer_task
+transfer_task
