@@ -22,7 +22,8 @@ tags | content_license |
 """
 
 
-
+BATCH_SIZE = 100000  
+ 
 default_args = {
     "owner": "airflow",
     "depends_on_past": False,
@@ -61,7 +62,9 @@ with DAG(
     # Extract cleaned post table from source DB
     # Load new table into target db
 
-    def transfer_data():
+    def transfer_data(batch_number):
+        offset = batch_number * BATCH_SIZE
+
         source_conn = psycopg2.connect(
             dbname="stackoverflow",
             user=source_db_user,
@@ -71,18 +74,21 @@ with DAG(
         )
         source_cursor = source_conn.cursor()
         source_cursor.execute(
-            """
+            f"""
             SELECT id, title, body, owner_user_id, creation_date 
             FROM posts 
             WHERE body IS NOT NULL 
             AND title IS NOT NULL
             AND owner_user_id IS NOT NULL
             AND creation_date IS NOT NULL
-            LIMIT 10000;
+            LIMIT {BATCH_SIZE} OFFSET {offset};
             """
         )
         
         rows = source_cursor.fetchall()
+        
+        if not rows:
+            return
         
         target_conn = psycopg2.connect(
             dbname="analyticaldb",
