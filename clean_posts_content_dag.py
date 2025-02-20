@@ -71,7 +71,15 @@ with DAG(
         )
         source_cursor = source_conn.cursor()
         source_cursor.execute(
-            "SELECT id, title, body, owner_user_id, creation_date FROM posts WHERE body IS NOT NULL LIMIT 10;"
+            """
+            SELECT id, title, body, owner_user_id, creation_date 
+            FROM posts 
+            WHERE body IS NOT NULL 
+            AND title IS NOT NULL
+            AND owner_user_id IS NOT NULL
+            AND creation_date IS NOT NULL
+            AND LIMIT 10;
+            """
         )
         
         rows = source_cursor.fetchall()
