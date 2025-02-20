@@ -101,11 +101,11 @@ with DAG(
                     INSERT INTO cleaned_posts (id, title, body, owner_user_id, creation_date) 
                     VALUES (%s, %s, %s, %s, %s) 
                     ON CONFLICT (id)
-                    DO UPDATE
-                    title = EXCLUDED.title,
-                    body = EXCLUDED.body,
-                    owner_user_id = EXCLUDED.owner_user_id,
-                    creation_date = EXCLUDED.creation_date;
+                    DO UPDATE SET
+                        title = EXCLUDED.title,
+                        body = EXCLUDED.body,
+                        owner_user_id = EXCLUDED.owner_user_id,
+                        creation_date = EXCLUDED.creation_date;
                     """, rows
                 )
 
