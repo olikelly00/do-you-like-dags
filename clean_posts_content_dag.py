@@ -5,6 +5,7 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.hooks.base import BaseHook
 import psycopg2
+from airflow.models import Variable
 import pandas as pd
 
 
@@ -19,7 +20,7 @@ accepted_answer_id | score | parent_id | view_count | answer_count |
 comment_count | owner_display_name | last_editor_display_name | title | 
 tags | content_license |  
 """
-TRANSACTIONAL_CONN_ID = "transactional_db_conn"
+
 
 
 default_args = {
@@ -31,13 +32,15 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
-source_db_user = BaseHook.get_connection("source_db_user")
-source_db_password = BaseHook.get_connection("source_db_password")
-source_db_host = BaseHook.get_connection("source_db_host")
+# source_db_user = BaseHook.get_connection("source_db_user")
+# source_db_password = BaseHook.get_connection("source_db_password")
+# source_db_host = BaseHook.get_connection("source_db_host")
 
-target_db_user = BaseHook.get_connection("target_db_user")
-target_db_password = BaseHook.get_connection("target_db_password")
-target_db_host = BaseHook.get_connection("target_db_host")
+source_db_user = Variable.get("source_db_user")
+
+# target_db_user = BaseHook.get_connection("target_db_user")
+# target_db_password = BaseHook.get_connection("target_db_password")
+# target_db_host = BaseHook.get_connection("target_db_host")
 
 with DAG(
     "extract_posts_sql_dag",
