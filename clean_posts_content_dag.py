@@ -105,7 +105,7 @@ with DAG(
                     title = EXCLUDED.title,
                     body = EXCLUDED.body,
                     owner_user_id = EXCLUDED.owner_user_id,
-                    creation_date = EXCLUDED.creation_date
+                    creation_date = EXCLUDED.creation_date;
                     """, rows
                 )
 
