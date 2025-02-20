@@ -3,6 +3,7 @@ from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
+from airflow.hooks.base import BaseHook
 import psycopg2
 import pandas as pd
 
@@ -30,6 +31,14 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
+source_db_user = BaseHook.get_connection("source_db_user")
+source_db_password = BaseHook.get_connection("source_db_password")
+source_db_host = BaseHook.get_connection("source_db_host")
+
+target_db_user = BaseHook.get_connection("target_db_user")
+target_db_password = BaseHook.get_connection("target_db_password")
+target_db_host = BaseHook.get_connection("target_db_host")
+
 with DAG(
     "extract_posts_sql_dag",
     default_args=default_args,
@@ -46,9 +55,9 @@ with DAG(
     def transfer_data():
         source_conn = psycopg2.connect(
             dbname="stackoverflow",
-            user="postgres",
-            password="password",
-            host="terraform-20250219092024569400000001.cfmnnswnfhpn.eu-west-2.rds.amazonaws.com",
+            user=source_db_user,
+            password=source_db_password,
+            host=source_db_host,
             port="5432",
         )
         source_cursor = source_conn.cursor()
@@ -60,9 +69,9 @@ with DAG(
         
         target_conn = psycopg2.connect(
             dbname="analyticaldb",
-            user="airflow_user_3",
-            password="password",
-            host="analyticaldb-water.cfmnnswnfhpn.eu-west-2.rds.amazonaws.com",
+            user=target_db_user,
+            password=target_db_password,
+            host=target_db_host,
             port="5432",
         )
         target_cursor = target_conn.cursor()
