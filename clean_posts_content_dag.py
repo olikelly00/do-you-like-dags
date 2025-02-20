@@ -37,6 +37,12 @@ default_args = {
 # source_db_host = BaseHook.get_connection("source_db_host")
 
 source_db_user = Variable.get("source_db_user")
+source_db_password = Variable.get("source_db_password")
+source_db_host = Variable.get("source_db_host")
+
+target_db_user = Variable.get("target_db_user")
+target_db_password = Variable.get("target_db_password")
+target_db_host = Variable.get("target_db_host")
 
 # target_db_user = BaseHook.get_connection("target_db_user")
 # target_db_password = BaseHook.get_connection("target_db_password")
