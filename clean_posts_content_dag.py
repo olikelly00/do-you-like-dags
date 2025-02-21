@@ -7,17 +7,8 @@ from airflow.hooks.base import BaseHook
 import psycopg2
 from airflow.models import Variable
 import pandas as pd
-
-"""
-id   | owner_user_id | last_editor_user_id | post_type_id | 
-accepted_answer_id | score | parent_id | view_count | answer_count | 
-comment_count | owner_display_name | last_editor_display_name | title | 
-tags | content_license |  
-"""
-
-BATCH_SIZE = 100000  
-TOTAL_ROWS = 57000000  
-NUM_BATCHES = TOTAL_ROWS // BATCH_SIZE
+from airflow.utils.task_group import TaskGroup
+from airflow.decorators import task
  
 default_args = {
     "owner": "airflow",
@@ -36,10 +27,38 @@ target_db_user = Variable.get("target_db_user")
 target_db_password = Variable.get("target_db_password")
 target_db_host = Variable.get("target_db_host")
 
-def transfer_all_batches(**kwargs):
-        for batch_number in range(NUM_BATCHES):
-            offset = batch_number * BATCH_SIZE
 
+def get_dynamic_id_ranges(num_batches=10):
+    
+    # set up psycopg / DB connection
+    source_conn = psycopg2.connect(
+        dbname="stackoverflow",
+        user=source_db_user,
+        password=source_db_password,
+        host=source_db_host,
+        port="5432",
+    )
+    cursor = source_conn.cursor()
+    
+    # fetch lowest and highest id number from posts table
+    cursor.execute("SELECT MIN(id), MAX(id) FROM posts;")
+    min_id, max_id = cursor.fetchone()
+    
+    source_conn.close()
+
+    batch_size = (max_id - min_id) // num_batches
+
+    batch_ranges = [
+        (min_id + i * batch_size, min_id + (i + 1) * batch_size - 1)
+        for i in range(num_batches)
+    ]
+    
+    batch_ranges[-1] = (batch_ranges[-1][0], max_id)
+
+    return batch_ranges
+
+@task
+def transfer_batches(start_id, end_id):
             source_conn = psycopg2.connect(
                 dbname="stackoverflow",
                 user=source_db_user,
@@ -55,8 +74,8 @@ def transfer_all_batches(**kwargs):
                 WHERE body IS NOT NULL 
                 AND title IS NOT NULL
                 AND owner_user_id IS NOT NULL
-                AND creation_date IS NOT NULL
-                LIMIT {BATCH_SIZE} OFFSET {offset};
+                AND creation_date IS NOT NULL 
+                AND id BETWEEN {start_id} AND {end_id};
                 """
             )
             
@@ -100,15 +119,22 @@ def transfer_all_batches(**kwargs):
 with DAG(
     "extract_posts_sql_dag",
     default_args=default_args,
-    description="A DAG to extract all posts from transactional DB",
+    description="A DAG to extract a batch of posts from transactional DB",
     schedule_interval=timedelta(days=1),
     start_date=datetime(2023, 4, 28),
     catchup=False,
 ) as dag:
-
-    transfer_task = PythonOperator(
-        task_id="transfer_all_batches",
-        python_callable=transfer_all_batches,  
-    )
     
-    transfer_task
+    batch_ranges = get_dynamic_id_ranges(10)
+
+    batch_tasks = transfer_batches.expand(
+        start_id=[start for start, _ in batch_ranges],
+        end_id=[end for _, end in batch_ranges]
+        )
+
+    # transfer_task = PythonOperator(
+    #     task_id="transfer_all_batches",
+    #     python_callable=transfer_all_batches,  
+    # )
+    
+    transfer_batches
