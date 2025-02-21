@@ -102,7 +102,7 @@ def get_dynamic_id_ranges(num_batches=10):
     batch_ranges[-1] = (batch_ranges[-1][0], max_id)
     return batch_ranges
 
-
+@task
 def transfer_batches(start_id, end_id):
             source_conn = psycopg2.connect(**transactional_params)
             source_cursor = source_conn.cursor()
