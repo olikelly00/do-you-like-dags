@@ -86,51 +86,55 @@ creation_date DATE NOT NULL);"""
 drop_temp_analytical_table = """DROP TABLE IF EXISTS staging_table"""
 drop_temp_transactional_table = """DROP TABLE IF EXISTS cleaned_posts"""
 
-def transfer_all_batches(**kwargs):
+def get_dynamic_id_ranges(num_batches=10):
     source_conn = psycopg2.connect(**transactional_params)
-    source_cursor = source_conn.cursor()
-    target_conn = psycopg2.connect(**analytical_params)
-    target_cursor = target_conn.cursor()
+    cursor = source_conn.cursor()
+    cursor.execute("SELECT MIN(id), MAX(id) FROM posts;")
+    min_id, max_id = cursor.fetchone()
+    source_conn.close()
+    batch_size = (max_id - min_id) // num_batches
+    batch_ranges = [
+        (min_id + i * batch_size, min_id + (i + 1) * batch_size - 1)
+        for i in range(num_batches)
+    ]
+    batch_ranges[-1] = (batch_ranges[-1][0], max_id)
+    return batch_ranges
 
-    BATCH_SIZE = 100000
-    source_cursor.execute("SELECT COUNT(*) FROM cleaned_posts")
-    TOTAL_ROWS = source_cursor.fetchone()[0]
-    NUM_BATCHES = (TOTAL_ROWS // BATCH_SIZE) + 1  # Ensure last batch is included
 
-    target_conn.commit()
-
-    for batch_number in range(NUM_BATCHES):
-        offset = batch_number * BATCH_SIZE
-        source_cursor.execute(f"""
+def transfer_batches(start_id, end_id):
+            source_conn = psycopg2.connect(**transactional_params)
+            source_cursor = source_conn.cursor()
+            target_conn = psycopg2.connect(**analytical_params)
+            target_cursor = target_conn.cursor()
+            source_cursor.execute(f"""
             SELECT id, title, body, owner_user_id, creation_date 
             FROM cleaned_posts 
-            LIMIT {BATCH_SIZE} OFFSET {offset};
+            WHERE id BETWEEN {start_id} AND {end_id};
         """)
-
-        rows = source_cursor.fetchall()
-        if not rows:
-            break 
-        
-
-        # The buffer is like a temporary in-memory storage (RAM). 
+            
+            rows = source_cursor.fetchall()
+            
+            if not rows:
+                return
+                    # The buffer is like a temporary in-memory storage (RAM). 
         # We create it using io.StringIO(), then write database rows into it in a tab-separated string format,
         #  which PostgreSQL can process efficiently. After resetting the cursor (buffer.seek(0), which moves the read position back to the beginning),
         #  we use COPY FROM STDIN. This allows PostgreSQL to bulk load the data directly from memory, making the process much faster than traditional INSERT statements.
 
-        buffer = io.StringIO()
-        for row in rows:
-            buffer.write("\t".join(map(str, row)) + "\n")  # Convert to tab-separated values
-        buffer.seek(0)  # Move buffer cursor to the start
+            buffer = io.StringIO()
+            for row in rows:
+                buffer.write("\t".join(map(str, row)) + "\n")  # Convert to tab-separated values
+            buffer.seek(0)  # Move buffer cursor to the start
 
-        try:
+            try:
             # Load data into staging table first, copying from buffer
-            target_cursor.copy_expert(
+                target_cursor.copy_expert(
                 "COPY staging_table (id, title, body, owner_user_id, creation_date) FROM STDIN WITH (FORMAT text);",
                 buffer
             )
 
             # Merge staging table into final table (Avoiding Duplicates)
-            target_cursor.execute("""
+                target_cursor.execute("""
                 INSERT INTO cleaned_posts_test_2 (id, title, body, owner_user_id, creation_date)
                 SELECT id, title, body, owner_user_id, creation_date FROM staging_table
                 ON CONFLICT (id)
@@ -141,16 +145,15 @@ def transfer_all_batches(**kwargs):
                     creation_date = EXCLUDED.creation_date;
             """)
 
+                target_conn.commit()
+            except Exception as e:
+                logging.error(f"Error during COPY: {e}")
+                target_conn.rollback()
+
+
             target_conn.commit()
-        except Exception as e:
-            logging.error(f"Error during COPY: {e}")
-            target_conn.rollback()
-
-
-    target_conn.commit()
-
-    source_conn.close()
-    target_conn.close()
+            source_conn.close()
+            target_conn.close()
 
 with DAG(
     "extract_posts_sql_dag_2",
@@ -161,11 +164,15 @@ with DAG(
     catchup=False,
 ) as dag:
 
-    transfer_task = PythonOperator(
-        task_id="transfer_all_batches",
-        python_callable=transfer_all_batches,  
-    )
+    #transfer_task = PythonOperator(task_id="transfer_all_batches",python_callable=transfer_all_batches,  )
 
+    batch_ranges = get_dynamic_id_ranges(10)
+
+    batch_tasks = transfer_batches.expand(
+        start_id=[start for start, _ in batch_ranges],
+        end_id=[end for _, end in batch_ranges]
+        )
+    
     set_up_task_2= SQLExecuteQueryOperator(
             task_id='create_temp_cleaned_table_analytical',
             sql=create_temp_cleaned_table_analytical,
@@ -193,6 +200,8 @@ with DAG(
             conn_id=TRANSACTIONAL_CONN_ID)
     
 
-[set_up_task_0, set_up_task_1, set_up_task_2] >> transfer_task >> [cleaned_set_up_0, cleaned_set_up_1]
+[set_up_task_0, set_up_task_1, set_up_task_2] >> batch_tasks >> [cleaned_set_up_0, cleaned_set_up_1]
+
+
 
 
