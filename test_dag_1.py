@@ -195,3 +195,4 @@ with DAG(
 
 [set_up_task_0, set_up_task_1, set_up_task_2] >> transfer_task >> [cleaned_set_up_0, cleaned_set_up_1]
 
+
