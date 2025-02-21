@@ -182,7 +182,7 @@ with DAG(
             sql=create_analytical_table,
             conn_id=ANALYTICAL_CONN_ID)
     
-    cleaned_set_up_0 = set_up_task_2= SQLExecuteQueryOperator(
+    cleaned_set_up_0 = SQLExecuteQueryOperator(
             task_id='drop_temp_cleaned_table_analytical',
             sql=drop_temp_analytical_table,
             conn_id=ANALYTICAL_CONN_ID)
