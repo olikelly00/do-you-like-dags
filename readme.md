@@ -1,7 +1,7 @@
 # Cloud-Based Apache Airflow DAG for Data Cleaning
 
 ## Contributors 
-- Edgar Vavlero [@edgarvalero23](https://github.com/edgarvalero23)
+- Edgar Valero [@edgarvalero23](https://github.com/edgarvalero23)
 - Matt Doyle [@pirateking92](https://github.com/pirateking92)
 - Oli Kelly [@olikelly00](https://github.com/olikelly00)
 
